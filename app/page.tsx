@@ -13,6 +13,8 @@ import {
   Datos,
   PALETA,
   RawRespuesta,
+  Snapshot,
+  datosToSnapshot,
   fmtNum,
   fmtPct,
   horaDesdeMdhm,
@@ -30,18 +32,6 @@ interface Toast {
   title: string;
   body: string;
   out?: boolean;
-}
-
-interface Snapshot {
-  mdhm: string;
-  numact: number;
-  hora: string;
-  pctMesas: number;
-  pctParticipacion: number;
-  validos: number;
-  blanco: number;
-  nulos: number;
-  cands: { id: string; nombre: string; porcentaje: number; votos: number }[];
 }
 
 /* ----------------------------- count-up hook ----------------------------- */
@@ -366,24 +356,32 @@ function niceMax(v: number) {
   return Math.ceil(v / step) * step;
 }
 
+const HM = (mins: number) => {
+  const h = Math.floor(mins / 60) % 24;
+  const m = Math.round(mins % 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+};
+
 function LineChart({
   series,
-  xLabels,
+  xVals,
   xHoras,
+  start,
   highlight,
 }: {
   series: Serie[];
-  xLabels: string[];
+  xVals: number[]; // minutos desde medianoche de cada boletín
   xHoras: string[];
+  start: number; // minuto de inicio del análisis (16:00 = 960)
   highlight: string | null;
 }) {
-  const W = 920;
+  const W = 940;
   const H = 440;
-  const padL = 46;
-  const padR = 18;
-  const padT = 18;
-  const padB = 40;
-  const n = xLabels.length;
+  const padL = 50;
+  const padR = 56;
+  const padT = 20;
+  const padB = 46;
+  const n = xVals.length;
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -394,18 +392,26 @@ function LineChart({
     )
   );
 
-  const x = (i: number) =>
-    n <= 1 ? padL : padL + (i * (W - padL - padR)) / (n - 1);
-  const y = (v: number) =>
-    H - padB - (v / maxVal) * (H - padT - padB);
+  const maxX = Math.max(start + 30, ...xVals);
+  const dmax = maxX + Math.max(10, (maxX - start) * 0.1);
 
+  const x = (mins: number) =>
+    padL + ((mins - start) / (dmax - start)) * (W - padL - padR);
+  const y = (v: number) => H - padB - (v / maxVal) * (H - padT - padB);
+
+  // Líneas horizontales (%)
   const yTicks = 5;
   const gridLines = Array.from({ length: yTicks + 1 }, (_, k) => {
     const val = (maxVal / yTicks) * k;
     return { val, yy: y(val) };
   });
 
-  const labelEvery = Math.max(1, Math.ceil(n / 7));
+  // Marcas de tiempo en el eje X
+  const totalMin = dmax - start;
+  const tStep =
+    totalMin <= 90 ? 15 : totalMin <= 180 ? 30 : totalMin <= 420 ? 60 : 120;
+  const xTicks: number[] = [];
+  for (let t = start; t <= dmax + 0.5; t += tStep) xTicks.push(t);
 
   function pathFor(s: Serie) {
     let d = "";
@@ -415,7 +421,7 @@ function LineChart({
         pen = false;
         return;
       }
-      d += `${pen ? "L" : "M"}${x(i)},${y(v)} `;
+      d += `${pen ? "L" : "M"}${x(xVals[i])},${y(v)} `;
       pen = true;
     });
     return d.trim();
@@ -425,11 +431,46 @@ function LineChart({
     const svg = svgRef.current;
     if (!svg || n === 0) return;
     const rect = svg.getBoundingClientRect();
-    const fx = (e.clientX - rect.left) / rect.width;
-    const svgX = fx * W;
-    let i = n <= 1 ? 0 : Math.round(((svgX - padL) / (W - padL - padR)) * (n - 1));
-    i = Math.max(0, Math.min(n - 1, i));
-    setHover(i);
+    const svgX = ((e.clientX - rect.left) / rect.width) * W;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < n; i++) {
+      const d = Math.abs(x(xVals[i]) - svgX);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    setHover(best);
+  }
+
+  // Etiquetas de valor al final de cada línea, evitando solapamientos.
+  type Lab = { id: string; color: string; text: string; y: number; xp: number };
+  const endLabels: Lab[] = series
+    .map((s) => {
+      let li = -1;
+      for (let i = s.values.length - 1; i >= 0; i--) {
+        if (s.values[i] != null) {
+          li = i;
+          break;
+        }
+      }
+      if (li < 0) return null;
+      const val = s.values[li] as number;
+      return {
+        id: s.id,
+        color: s.color,
+        text: `${val.toFixed(1)}%`,
+        y: y(val),
+        xp: x(xVals[li]),
+      };
+    })
+    .filter((l): l is Lab => l !== null)
+    .sort((a, b) => a.y - b.y);
+  const gap = 15;
+  for (let i = 1; i < endLabels.length; i++) {
+    if (endLabels[i].y - endLabels[i - 1].y < gap)
+      endLabels[i].y = endLabels[i - 1].y + gap;
   }
 
   const hoverVals =
@@ -440,10 +481,11 @@ function LineChart({
           .sort((a, b) => (b.v as number) - (a.v as number))
       : [];
 
-  const boxW = 188;
-  const boxH = 22 + hoverVals.length * 17;
-  const hoverX = hover != null ? x(hover) : 0;
-  const boxX = hover != null && hoverX > W - boxW - 20 ? hoverX - boxW - 10 : hoverX + 10;
+  const boxW = 196;
+  const boxH = 24 + hoverVals.length * 17;
+  const hoverX = hover != null ? x(xVals[hover]) : 0;
+  const boxX =
+    hover != null && hoverX > W - boxW - 20 ? hoverX - boxW - 10 : hoverX + 10;
 
   return (
     <svg
@@ -453,7 +495,7 @@ function LineChart({
       onMouseMove={onMove}
       onMouseLeave={() => setHover(null)}
     >
-      {/* grid */}
+      {/* grid horizontal (%) */}
       {gridLines.map((g, k) => (
         <g key={k}>
           <line
@@ -461,55 +503,97 @@ function LineChart({
             y1={g.yy}
             x2={W - padR}
             y2={g.yy}
-            stroke="rgba(255,255,255,0.06)"
+            stroke="rgba(255,255,255,0.07)"
             strokeWidth="1"
           />
-          <text x={padL - 8} y={g.yy + 4} fontSize="11" fill="#8b93b8" textAnchor="end">
+          <text x={padL - 9} y={g.yy + 4} fontSize="12" fill="#8b93b8" textAnchor="end">
             {g.val.toFixed(0)}%
           </text>
         </g>
       ))}
 
-      {/* x labels */}
-      {xLabels.map((lab, i) =>
-        i % labelEvery === 0 || i === n - 1 ? (
-          <text
-            key={i}
-            x={x(i)}
-            y={H - padB + 18}
-            fontSize="11"
-            fill="#8b93b8"
-            textAnchor="middle"
-          >
-            {lab}
+      {/* marcas de tiempo (eje X) */}
+      {xTicks.map((t, i) => (
+        <g key={i}>
+          <line
+            x1={x(t)}
+            y1={padT}
+            x2={x(t)}
+            y2={H - padB}
+            stroke="rgba(255,255,255,0.04)"
+            strokeWidth="1"
+          />
+          <text x={x(t)} y={H - padB + 19} fontSize="12" fill="#8b93b8" textAnchor="middle">
+            {HM(t)}
           </text>
-        ) : null
-      )}
+        </g>
+      ))}
+
+      {/* línea de inicio (4:00 p.m.) */}
+      <line
+        x1={x(start)}
+        y1={padT}
+        x2={x(start)}
+        y2={H - padB}
+        stroke="rgba(255,210,74,0.45)"
+        strokeWidth="1.5"
+        strokeDasharray="5 4"
+      />
+      <text
+        x={x(start) + 6}
+        y={padT + 13}
+        fontSize="11"
+        fill="var(--amarillo)"
+        fontWeight="700"
+      >
+        Inicio 16:00
+      </text>
 
       {/* series */}
       {series.map((s) => {
         const dim = highlight != null && highlight !== s.id;
         return (
-          <path
-            key={s.id}
-            d={pathFor(s)}
-            fill="none"
-            stroke={s.color}
-            strokeWidth={highlight === s.id ? 3.4 : 2.2}
-            strokeOpacity={dim ? 0.22 : 1}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
+          <g key={s.id} style={{ opacity: dim ? 0.25 : 1 }}>
+            <path
+              d={pathFor(s)}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={highlight === s.id ? 3.6 : 2.4}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+            {s.values.map((v, i) =>
+              v != null ? (
+                <circle
+                  key={i}
+                  cx={x(xVals[i])}
+                  cy={y(v)}
+                  r={i === s.values.length - 1 ? 4 : 2.6}
+                  fill={s.color}
+                />
+              ) : null
+            )}
+          </g>
         );
       })}
 
-      {/* single-point dots (cuando solo hay 1 boletín) */}
-      {n === 1 &&
-        series.map((s) =>
-          s.values[0] != null ? (
-            <circle key={s.id} cx={x(0)} cy={y(s.values[0] as number)} r="4" fill={s.color} />
-          ) : null
-        )}
+      {/* etiquetas de valor al final de cada línea */}
+      {endLabels.map((l) => {
+        const dim = highlight != null && highlight !== l.id;
+        return (
+          <text
+            key={l.id}
+            x={l.xp + 8}
+            y={Math.max(padT + 4, l.y + 4)}
+            fontSize="12"
+            fontWeight="800"
+            fill={l.color}
+            opacity={dim ? 0.3 : 1}
+          >
+            {l.text}
+          </text>
+        );
+      })}
 
       {/* hover */}
       {hover != null && (
@@ -519,7 +603,7 @@ function LineChart({
             y1={padT}
             x2={hoverX}
             y2={H - padB}
-            stroke="rgba(255,255,255,0.25)"
+            stroke="rgba(255,255,255,0.3)"
             strokeWidth="1"
             strokeDasharray="4 4"
           />
@@ -529,7 +613,7 @@ function LineChart({
                 key={s.id}
                 cx={hoverX}
                 cy={y(s.values[hover] as number)}
-                r="3.5"
+                r="4"
                 fill={s.color}
                 stroke="#0a0e1c"
                 strokeWidth="1.5"
@@ -543,32 +627,27 @@ function LineChart({
             height={boxH}
             rx="10"
             fill="#05070f"
-            stroke="rgba(255,255,255,0.14)"
+            stroke="rgba(255,255,255,0.16)"
           />
-          <text x={boxX + 12} y={padT + 16} fontSize="11.5" fill="#e7ecff" fontWeight="700">
-            {xLabels[hover]} · {xHoras[hover]}
+          <text x={boxX + 12} y={padT + 17} fontSize="12" fill="#e7ecff" fontWeight="700">
+            {xHoras[hover]}
           </text>
           {hoverVals.map((o, k) => (
             <g key={o.s.id}>
               <rect
                 x={boxX + 12}
-                y={padT + 26 + k * 17}
+                y={padT + 28 + k * 17}
                 width="9"
                 height="9"
                 rx="2"
                 fill={o.s.color}
               />
-              <text
-                x={boxX + 27}
-                y={padT + 34 + k * 17}
-                fontSize="11"
-                fill="#c7cdec"
-              >
-                {o.s.name.length > 16 ? o.s.name.slice(0, 15) + "…" : o.s.name}
+              <text x={boxX + 27} y={padT + 36 + k * 17} fontSize="11" fill="#c7cdec">
+                {o.s.name.length > 17 ? o.s.name.slice(0, 16) + "…" : o.s.name}
               </text>
               <text
                 x={boxX + boxW - 12}
-                y={padT + 34 + k * 17}
+                y={padT + 36 + k * 17}
                 fontSize="11"
                 fill="#fff"
                 fontWeight="700"
@@ -587,10 +666,12 @@ function LineChart({
 /* ----------------------------- modal histórico --------------------------- */
 function Historico({
   historial,
+  loading,
   onClose,
   onClear,
 }: {
   historial: Snapshot[];
+  loading: boolean;
   onClose: () => void;
   onClear: () => void;
 }) {
@@ -617,7 +698,13 @@ function Historico({
     }))
     .filter((s) => !hidden.has(s.id));
 
-  const xLabels = historial.map((s) => `#${s.numact}`);
+  // Inicio del análisis: 4:00 p.m. (cierre de urnas) = 960 minutos.
+  const START_MIN = 16 * 60;
+  const minutosDe = (hora: string) => {
+    const m = hora.match(/(\d{2}):(\d{2})\s*$/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : START_MIN;
+  };
+  const xVals = historial.map((s) => minutosDe(s.hora));
   const xHoras = historial.map((s) => s.hora);
 
   const toggle = (id: string) =>
@@ -635,8 +722,9 @@ function Historico({
           <div>
             <div className="modal-title">📈 Histórico de la jornada</div>
             <div className="modal-sub">
-              Evolución de cada candidato boletín a boletín, desde el inicio del
-              escrutinio hasta el dato más reciente.
+              Evolución del porcentaje de cada candidato a lo largo del tiempo. El
+              análisis arranca a las 4:00 p.m. (cierre de urnas, 31 may) y avanza
+              hasta el dato más reciente.
             </div>
           </div>
           <div className="modal-actions">
@@ -649,11 +737,19 @@ function Historico({
           </div>
         </div>
 
-        {historial.length === 0 ? (
+        {loading ? (
           <div className="empty-hist">
-            Aún no hay boletines registrados.
+            Cargando todos los boletines desde el inicio de la jornada…
             <br />
-            En cuanto lleguen avances se irá dibujando la tendencia aquí.
+            <span style={{ opacity: 0.7, fontSize: 12 }}>
+              Consultando avances AV_0001 → actual en la Registraduría
+            </span>
+          </div>
+        ) : historial.length === 0 ? (
+          <div className="empty-hist">
+            No se pudieron cargar los boletines históricos.
+            <br />
+            Reintenta recargando la página.
           </div>
         ) : (
           <>
@@ -665,7 +761,7 @@ function Historico({
               <div className="mstat">
                 <div className="mstat-label">Rango horario</div>
                 <div className="mstat-val">
-                  {first.hora} <small>→ {last.hora}</small>
+                  16:00 <small>(inicio) → {last.hora}</small>
                 </div>
               </div>
               <div className="mstat">
@@ -688,8 +784,9 @@ function Historico({
               <div className="chart-wrap">
                 <LineChart
                   series={series}
-                  xLabels={xLabels}
+                  xVals={xVals}
                   xHoras={xHoras}
+                  start={START_MIN}
                   highlight={hi}
                 />
               </div>
@@ -732,6 +829,7 @@ export default function Home() {
   const [spin, setSpin] = useState(false);
   const [history, setHistory] = useState<number[]>([]);
   const [historial, setHistorial] = useState<Snapshot[]>([]);
+  const [histLoading, setHistLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [showHist, setShowHist] = useState(false);
 
@@ -739,21 +837,54 @@ export default function Home() {
   const pausedRef = useRef(false);
   const toastId = useRef(0);
 
-  // Carga el historial persistido (para mostrar "cómo inició").
-  useEffect(() => {
+  const guardarHistorial = useCallback((snaps: Snapshot[]) => {
+    setHistorial(snaps);
+    setHistory(snaps.map((s) => s.pctParticipacion).slice(-30));
+    const last = snaps[snaps.length - 1];
+    if (last?.mdhm) lastMdhm.current = last.mdhm;
     try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) {
-        const parsed: Snapshot[] = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length) {
-          setHistorial(parsed);
-          setHistory(parsed.map((s) => s.pctParticipacion).slice(-30));
-        }
-      }
+      localStorage.setItem(LS_KEY, JSON.stringify(snaps));
     } catch {
       /* ignore */
     }
   }, []);
+
+  // Al recargar: trae TODOS los boletines desde el #1 vía API HIST oficial.
+  useEffect(() => {
+    let cancelled = false;
+
+    const cargarHistoricoCompleto = async () => {
+      setHistLoading(true);
+      try {
+        const r = await fetch("/api/historico", { cache: "no-store" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const json = await r.json();
+        const boletines: Snapshot[] = json.boletines ?? [];
+        if (cancelled) return;
+        if (boletines.length) {
+          guardarHistorial(boletines);
+        }
+      } catch {
+        if (cancelled) return;
+        try {
+          const raw = localStorage.getItem(LS_KEY);
+          if (raw) {
+            const parsed: Snapshot[] = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length) guardarHistorial(parsed);
+          }
+        } catch {
+          /* ignore */
+        }
+      } finally {
+        if (!cancelled) setHistLoading(false);
+      }
+    };
+
+    cargarHistoricoCompleto();
+    return () => {
+      cancelled = true;
+    };
+  }, [guardarHistorial]);
 
   const pushToast = useCallback((title: string, body: string) => {
     const id = ++toastId.current;
@@ -783,26 +914,14 @@ export default function Home() {
       setEstado("live");
 
       if (esNuevo) {
-        setHistory((h) => [...h, d.resumen.pctParticipacion].slice(-30));
-        const snap: Snapshot = {
-          mdhm: d.resumen.mdhm,
-          numact: d.resumen.numact,
-          hora: horaDesdeMdhm(d.resumen.mdhm),
-          pctMesas: d.resumen.pctMesas,
-          pctParticipacion: d.resumen.pctParticipacion,
-          validos: d.resumen.votosValidos,
-          blanco: d.resumen.votosBlanco,
-          nulos: d.resumen.votosNulos,
-          cands: d.candidatos.map((c) => ({
-            id: c.id,
-            nombre: c.nombre,
-            porcentaje: c.porcentaje,
-            votos: c.votos,
-          })),
-        };
+        const snap = datosToSnapshot(d);
         setHistorial((prev) => {
-          if (prev.some((s) => s.mdhm === snap.mdhm)) return prev;
+          if (prev.some((s) => s.mdhm === snap.mdhm)) {
+            setHistory(prev.map((s) => s.pctParticipacion).slice(-30));
+            return prev;
+          }
           const next = [...prev, snap].slice(-MAX_HIST);
+          setHistory(next.map((s) => s.pctParticipacion).slice(-30));
           try {
             localStorage.setItem(LS_KEY, JSON.stringify(next));
           } catch {
@@ -1034,7 +1153,12 @@ export default function Home() {
         <div className="panel">
           <div className="panel-head">
             <span className="panel-title">Candidatos</span>
-            <span className={`badge ${bump ? "bump" : ""}`}>Boletín {r?.numact ?? 0}</span>
+            <div className={`boletin ${bump ? "bump" : ""}`} title="Número de boletín / avance">
+              <span className="boletin-cap">Boletín</span>
+              <span className="boletin-num tabular">
+                <Num value={r?.numact ?? 0} format={(n) => String(Math.round(n))} />
+              </span>
+            </div>
           </div>
           {datos ? (
             <CandidatosLista
@@ -1069,7 +1193,12 @@ export default function Home() {
       {/* ---------------- FOOTER ---------------- */}
       <footer className="footer">
         <span>Fuente: Registraduría Nacional del Estado Civil · API pública</span>
-        <span>Refresco automático cada {INTERVALO_S} s · {historial.length} boletines registrados</span>
+        <span>
+          Refresco cada {INTERVALO_S} s ·{" "}
+          {histLoading
+            ? "Cargando historial completo…"
+            : `${historial.length} boletines (desde #1)`}
+        </span>
       </footer>
 
       {/* ---------------- TOASTS ---------------- */}
@@ -1086,6 +1215,7 @@ export default function Home() {
       {showHist && (
         <Historico
           historial={historial}
+          loading={histLoading}
           onClose={() => setShowHist(false)}
           onClear={limpiarHist}
         />

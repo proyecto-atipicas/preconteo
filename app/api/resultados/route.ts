@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
+import { REG_BASE, REG_HEADERS } from "@/app/lib";
 
 // Evita cualquier cacheo: el front decide cada cuánto refresca.
 export const dynamic = "force-dynamic";
 
-const SOURCE_URL =
-  "https://resultados.registraduria.gov.co/json/ACT/PR/00.json";
+const SOURCE_URL = `${REG_BASE}/ACT/PR/00.json`;
 
 /**
  * Proxy del lado del servidor hacia la API pública de la Registraduría.
@@ -14,12 +14,7 @@ const SOURCE_URL =
 export async function GET() {
   try {
     const res = await fetch(SOURCE_URL, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-        Referer: "https://resultados.registraduria.gov.co/",
-        Accept: "application/json",
-      },
+      headers: REG_HEADERS,
       cache: "no-store",
     });
 

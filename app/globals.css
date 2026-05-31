@@ -385,6 +385,42 @@ body::after {
   animation: bump 0.6s ease;
 }
 
+/* Número de boletín grande con microanimación */
+.boletin {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 12px 4px 14px;
+  border-radius: 14px;
+  background: rgba(91, 140, 255, 0.1);
+  border: 1px solid rgba(91, 140, 255, 0.28);
+  line-height: 1;
+}
+.boletin-cap {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.boletin-num {
+  font-size: 30px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #9bb8ff, var(--azul) 55%, var(--amarillo));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  display: inline-block;
+  animation: boletin-breathe 2.8s ease-in-out infinite;
+}
+.boletin.bump {
+  animation: boletin-pop 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.boletin.bump .boletin-num {
+  animation: boletin-flip 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Lista de candidatos (scroll interno) */
 .cand-list {
   flex: 1 1 auto;
@@ -856,6 +892,38 @@ body::after {
   }
   35% {
     transform: scale(1.22);
+  }
+}
+@keyframes boletin-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 0 0 rgba(91, 140, 255, 0));
+  }
+  50% {
+    transform: translateY(-1px) scale(1.04);
+    filter: drop-shadow(0 0 8px rgba(91, 140, 255, 0.45));
+  }
+}
+@keyframes boletin-pop {
+  0%,
+  100% {
+    transform: scale(1);
+    border-color: rgba(91, 140, 255, 0.28);
+  }
+  40% {
+    transform: scale(1.12);
+    border-color: rgba(255, 210, 74, 0.7);
+  }
+}
+@keyframes boletin-flip {
+  0% {
+    transform: rotateX(-90deg);
+    opacity: 0.2;
+  }
+  100% {
+    transform: rotateX(0);
+    opacity: 1;
   }
 }
 @keyframes shimmer {

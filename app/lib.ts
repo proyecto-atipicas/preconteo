@@ -77,6 +77,47 @@ export interface Datos {
   candidatos: Candidato[];
 }
 
+/** Punto del histórico (un boletín/avance). */
+export interface Snapshot {
+  mdhm: string;
+  numact: number;
+  hora: string;
+  pctMesas: number;
+  pctParticipacion: number;
+  validos: number;
+  blanco: number;
+  nulos: number;
+  cands: { id: string; nombre: string; porcentaje: number; votos: number }[];
+}
+
+export function datosToSnapshot(d: Datos): Snapshot {
+  return {
+    mdhm: d.resumen.mdhm,
+    numact: d.resumen.numact,
+    hora: horaDesdeMdhm(d.resumen.mdhm),
+    pctMesas: d.resumen.pctMesas,
+    pctParticipacion: d.resumen.pctParticipacion,
+    validos: d.resumen.votosValidos,
+    blanco: d.resumen.votosBlanco,
+    nulos: d.resumen.votosNulos,
+    cands: d.candidatos.map((c) => ({
+      id: c.id,
+      nombre: c.nombre,
+      porcentaje: c.porcentaje,
+      votos: c.votos,
+    })),
+  };
+}
+
+export const REG_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+  Referer: "https://resultados.registraduria.gov.co/",
+  Accept: "application/json",
+} as const;
+
+export const REG_BASE = "https://resultados.registraduria.gov.co/json";
+
 /** "49,90%" -> 49.9 | "41.421.973" -> 41421973 */
 export function num(s: string | undefined | null): number {
   if (s == null) return 0;
