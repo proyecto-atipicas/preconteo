@@ -20,8 +20,10 @@ import {
   horaDesdeMdhm,
   parseDatos,
 } from "./lib";
+import { DepartamentosSection } from "./components/DepartamentosSection";
 
 const INTERVALO_S = 15; // refresco automático cada 15 s
+type Seccion = "vivo" | "departamentos";
 const LS_KEY = "preconteo_hist_pr_2026";
 const MAX_HIST = 300;
 
@@ -832,6 +834,7 @@ export default function Home() {
   const [histLoading, setHistLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [showHist, setShowHist] = useState(false);
+  const [seccion, setSeccion] = useState<Seccion>("vivo");
 
   const lastMdhm = useRef<string | null>(null);
   const pausedRef = useRef(false);
@@ -1086,6 +1089,27 @@ export default function Home() {
         </div>
       </header>
 
+      <nav className="nav-tabs" aria-label="Secciones">
+        <button
+          type="button"
+          className={`nav-tab ${seccion === "vivo" ? "active" : ""}`}
+          onClick={() => setSeccion("vivo")}
+        >
+          En vivo
+        </button>
+        <button
+          type="button"
+          className={`nav-tab ${seccion === "departamentos" ? "active" : ""}`}
+          onClick={() => setSeccion("departamentos")}
+        >
+          Por departamento
+        </button>
+      </nav>
+
+      {seccion === "departamentos" ? (
+        <DepartamentosSection />
+      ) : (
+        <>
       {/* ---------------- CARDS ---------------- */}
       <section className="cards">
         <div className={`card ${flash ? "flash" : ""}`} data-tip="Mesas con escrutinio reportado">
@@ -1189,15 +1213,19 @@ export default function Home() {
           </div>
         </div>
       </section>
+        </>
+      )}
 
       {/* ---------------- FOOTER ---------------- */}
       <footer className="footer">
         <span>Fuente: Registraduría Nacional del Estado Civil · API pública</span>
         <span>
           Refresco cada {INTERVALO_S} s ·{" "}
-          {histLoading
-            ? "Cargando historial completo…"
-            : `${historial.length} boletines (desde #1)`}
+          {seccion === "departamentos"
+            ? "Votos por departamento · Registraduría"
+            : histLoading
+              ? "Cargando historial completo…"
+              : `${historial.length} boletines (desde #1)`}
         </span>
       </footer>
 

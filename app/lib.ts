@@ -118,6 +118,62 @@ export const REG_HEADERS = {
 
 export const REG_BASE = "https://resultados.registraduria.gov.co/json";
 
+export interface DepartamentoInfo {
+  codigo: string;
+  nombre: string;
+}
+
+export interface VotoDeptoCandidato {
+  id: string;
+  nombre: string;
+  votos: number;
+}
+
+export interface DepartamentoVotos {
+  codigo: string;
+  nombre: string;
+  candidatos: VotoDeptoCandidato[];
+  totalValidos: number;
+}
+
+export interface DatosDepartamentos {
+  candidatos: { id: string; nombre: string }[];
+  departamentos: DepartamentoVotos[];
+  total: number;
+  mdhm?: string;
+}
+
+interface NomAmbito {
+  co: string;
+  n?: string;
+  s?: string;
+  l: number;
+}
+
+/** Lista los 34 departamentos desde nomenclator.json (nivel l=2). */
+export function departamentosDesdeNomenclator(nom: {
+  amb?: Array<{ ambitos?: NomAmbito[] }>;
+}): DepartamentoInfo[] {
+  const ambitos = nom?.amb?.[0]?.ambitos ?? [];
+  return ambitos
+    .filter((a) => a.l === 2 && a.co)
+    .map((a) => ({
+      codigo: a.co,
+      nombre: (a.n || a.s || a.co).trim().toUpperCase(),
+    }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+
+export async function fetchRegistraduria<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url, { headers: REG_HEADERS, cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 /** "49,90%" -> 49.9 | "41.421.973" -> 41421973 */
 export function num(s: string | undefined | null): number {
   if (s == null) return 0;
