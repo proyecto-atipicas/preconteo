@@ -1067,6 +1067,12 @@ export default function Home() {
   const dotClass = estado === "live" ? "live" : estado === "error" ? "error" : "warn";
   const r = datos?.resumen;
 
+  // Diferencia de votos entre el primero y el segundo candidato.
+  const lider = datos?.candidatos[0];
+  const segundo = datos?.candidatos[1];
+  const diffVotos = lider && segundo ? lider.votos - segundo.votos : 0;
+  const diffPts = lider && segundo ? lider.porcentaje - segundo.porcentaje : 0;
+
   return (
     <div className="shell">
       {/* ---------------- TOPBAR ---------------- */}
@@ -1219,6 +1225,26 @@ export default function Home() {
             Blancos {fmtNum(r?.votosBlanco ?? 0)} · Nulos {fmtNum(r?.votosNulos ?? 0)}
           </div>
         </div>
+
+        <div
+          className={`card ${flash ? "flash" : ""}`}
+          data-tip="Diferencia de votos entre el 1.º y el 2.º candidato"
+        >
+          <div className="card-top">
+            <span className="card-icon">⚖️</span>
+            <span className="card-label">Diferencia de votos</span>
+          </div>
+          <div className="card-body">
+            <div className="card-value tabular">
+              <Num value={diffVotos} format={fmtNum} />
+            </div>
+          </div>
+          <div className="card-meta">
+            {lider && segundo
+              ? `Ventaja de ${nombreCorto(lider.nombre)} · +${fmtPct(diffPts, 2)}`
+              : "—"}
+          </div>
+        </div>
       </section>
 
       {/* ---------------- GRID ---------------- */}
@@ -1299,6 +1325,12 @@ export default function Home() {
       )}
     </div>
   );
+}
+
+/* Nombre corto del candidato (primer y último término). */
+function nombreCorto(n: string): string {
+  const p = n.trim().split(/\s+/);
+  return p.length <= 2 ? n : `${p[0]} ${p[p.length - 1]}`;
 }
 
 /* Efecto ripple en los botones. */
