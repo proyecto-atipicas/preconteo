@@ -5,6 +5,7 @@ import {
   DatosDepartamentos,
   DepartamentoVotos,
   PALETA,
+  Vuelta,
   fmtNum,
   horaDesdeMdhm,
 } from "../lib";
@@ -12,8 +13,10 @@ import {
 type SortKey = "nombre" | "total" | string;
 
 export function DepartamentosSection({
+  vuelta = 1,
   onRefresh,
 }: {
+  vuelta?: Vuelta;
   onRefresh?: () => void;
 }) {
   const [data, setData] = useState<DatosDepartamentos | null>(null);
@@ -28,7 +31,9 @@ export function DepartamentosSection({
     setLoading(true);
     setError(null);
     try {
-      const r = await fetch("/api/departamentos", { cache: "no-store" });
+      const r = await fetch(`/api/departamentos?vuelta=${vuelta}`, {
+        cache: "no-store",
+      });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const json: DatosDepartamentos = await r.json();
       if (!json.departamentos?.length) throw new Error("Sin datos");
@@ -39,7 +44,7 @@ export function DepartamentosSection({
     } finally {
       setLoading(false);
     }
-  }, [onRefresh]);
+  }, [onRefresh, vuelta]);
 
   useEffect(() => {
     cargar();

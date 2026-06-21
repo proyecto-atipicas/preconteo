@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import {
-  REG_BASE,
   departamentosDesdeNomenclator,
   fetchRegistraduria,
   parseDatos,
+  regBase,
+  vueltaFromRequest,
   type RawRespuesta,
 } from "@/app/lib";
 
@@ -14,12 +15,14 @@ const CONCURRENCY = 6;
 /**
  * Votos por candidato en cada departamento (ACT/PR/{código}.json).
  * Catálogo de deptos: nomenclator.json → ambitos con l=2.
+ * `?vuelta=2` consulta la segunda vuelta (`/v2/json`).
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const base = regBase(vueltaFromRequest(req.url));
   try {
     const nom = await fetchRegistraduria<{
       amb?: Array<{ ambitos?: { co: string; n?: string; s?: string; l: number }[] }>;
-    }>(`${REG_BASE}/nomenclator.json`);
+    }>(`${base}/nomenclator.json`);
 
     const depts = departamentosDesdeNomenclator(nom ?? {});
     if (!depts.length) {
@@ -27,7 +30,7 @@ export async function GET() {
     }
 
     const nacional = await fetchRegistraduria<RawRespuesta>(
-      `${REG_BASE}/ACT/PR/00.json`
+      `${base}/ACT/PR/00.json`
     );
     const ordenCands = nacional ? parseDatos(nacional).candidatos : [];
 
@@ -43,7 +46,7 @@ export async function GET() {
       const fetched = await Promise.all(
         batch.map(async (d) => {
           const raw = await fetchRegistraduria<RawRespuesta>(
-            `${REG_BASE}/ACT/PR/${d.codigo}.json`
+            `${base}/ACT/PR/${d.codigo}.json`
           );
           if (!raw) return null;
           const parsed = parseDatos(raw);

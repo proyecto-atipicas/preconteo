@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
-import { REG_BASE, REG_HEADERS } from "@/app/lib";
+import { REG_HEADERS, regBase, vueltaFromRequest } from "@/app/lib";
 
 // Evita cualquier cacheo: el front decide cada cuánto refresca.
 export const dynamic = "force-dynamic";
-
-const SOURCE_URL = `${REG_BASE}/ACT/PR/00.json`;
 
 /**
  * Proxy del lado del servidor hacia la API pública de la Registraduría.
  * CloudFront responde 403 sin las cabeceras User-Agent + Referer, por lo que
  * la petición debe salir desde el servidor (no desde el navegador).
+ *
+ * `?vuelta=2` consulta la segunda vuelta (`/v2/json`); por defecto, la primera.
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const SOURCE_URL = `${regBase(vueltaFromRequest(req.url))}/ACT/PR/00.json`;
   try {
     const res = await fetch(SOURCE_URL, {
       headers: REG_HEADERS,

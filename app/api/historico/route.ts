@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import {
-  REG_BASE,
   REG_HEADERS,
   Snapshot,
   datosToSnapshot,
   num,
   parseDatos,
+  regBase,
+  vueltaFromRequest,
   type RawRespuesta,
 } from "@/app/lib";
 
@@ -24,18 +25,20 @@ async function fetchJson(url: string): Promise<RawRespuesta | null> {
 }
 
 /** URL oficial de un avance histórico (boletín N → AV_000N). */
-function urlAvance(n: number) {
+function urlAvance(base: string, n: number) {
   const code = `AV_${String(n).padStart(4, "0")}`;
-  return `${REG_BASE}/HIST/00/PR/${code}/00.json`;
+  return `${base}/HIST/00/PR/${code}/00.json`;
 }
 
 /**
  * Descarga todos los boletines desde el #1 hasta el actual (ACT.numact).
  * Patrón descubierto en la SPA oficial: /json/HIST/00/PR/AV_XXXX/00.json
+ * `?vuelta=2` recorre el histórico de la segunda vuelta (`/v2/json`).
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const base = regBase(vueltaFromRequest(req.url));
   try {
-    const act = await fetchJson(`${REG_BASE}/ACT/PR/00.json`);
+    const act = await fetchJson(`${base}/ACT/PR/00.json`);
     if (!act) {
       return NextResponse.json({ error: "act_unavailable" }, { status: 502 });
     }
@@ -56,7 +59,7 @@ export async function GET() {
       const batch = await Promise.all(
         Array.from({ length: end - start + 1 }, (_, i) => {
           const n = start + i;
-          return fetchJson(urlAvance(n));
+          return fetchJson(urlAvance(base, n));
         })
       );
 

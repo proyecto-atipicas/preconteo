@@ -37,6 +37,9 @@ export interface RawRespuesta {
           cedula?: string;
           nomcan?: string;
           apecan?: string;
+          // Fórmula vicepresidencial (presente en la segunda vuelta).
+          nomcan2?: string;
+          apecan2?: string;
           vot?: string;
           pvot?: string;
           pref?: string;
@@ -50,6 +53,8 @@ export interface RawRespuesta {
 export interface Candidato {
   id: string;
   nombre: string;
+  /** Fórmula vicepresidencial (segunda vuelta); vacío en primera. */
+  vicepresidente?: string;
   codpartido: string;
   votos: number;
   porcentaje: number;
@@ -116,7 +121,28 @@ export const REG_HEADERS = {
   Accept: "application/json",
 } as const;
 
-export const REG_BASE = "https://resultados.registraduria.gov.co/json";
+/** Vuelta electoral: 1 = primera (`/json`), 2 = segunda (`/v2/json`). */
+export type Vuelta = 1 | 2;
+
+export const REG_BASE_V1 = "https://resultados.registraduria.gov.co/json";
+export const REG_BASE_V2 = "https://resultados.registraduria.gov.co/v2/json";
+
+/** Base de la Registraduría según la vuelta. La segunda vive bajo `/v2`. */
+export function regBase(vuelta: Vuelta = 1): string {
+  return vuelta === 2 ? REG_BASE_V2 : REG_BASE_V1;
+}
+
+/** Lee `?vuelta=` de la URL de la petición y la normaliza a 1 | 2. */
+export function vueltaFromRequest(url: string): Vuelta {
+  try {
+    return new URL(url).searchParams.get("vuelta") === "2" ? 2 : 1;
+  } catch {
+    return 1;
+  }
+}
+
+// Compatibilidad: REG_BASE apunta a la primera vuelta.
+export const REG_BASE = REG_BASE_V1;
 
 export interface DepartamentoInfo {
   codigo: string;
@@ -211,9 +237,11 @@ export function parseDatos(raw: RawRespuesta): Datos {
       const act = p.act ?? {};
       const c = act.cantotabla?.[0] ?? {};
       const nombre = `${c.nomcan ?? ""} ${c.apecan ?? ""}`.trim();
+      const vice = `${c.nomcan2 ?? ""} ${c.apecan2 ?? ""}`.trim();
       return {
         id: c.cedula || c.codcan || act.codpar || `cand-${i}`,
         nombre: nombre || `Candidato ${i + 1}`,
+        vicepresidente: vice || undefined,
         codpartido: act.codpar ?? String(i),
         votos: num(act.vot),
         porcentaje: num(act.pvot),

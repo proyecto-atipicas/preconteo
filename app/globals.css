@@ -557,6 +557,25 @@ body::after {
   font-size: 13.5px;
   font-weight: 800;
 }
+.cand-vp {
+  font-size: 11px;
+  color: var(--muted);
+  margin: -2px 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cand-vp-cap {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #0a0e1c;
+  background: var(--amarillo);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
 .bar {
   height: 8px;
   border-radius: 999px;
@@ -1062,6 +1081,44 @@ body::after {
 }
 .nav-tab.active {
   background: var(--azul);
+  color: #0a0e1c;
+}
+
+/* Selector de vuelta (primera / segunda) */
+.tabs-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.vuelta-switch {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  width: fit-content;
+}
+.vuelta-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 7px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.vuelta-tab:hover {
+  color: var(--text);
+}
+.vuelta-tab.active {
+  background: var(--amarillo);
   color: #0a0e1c;
 }
 

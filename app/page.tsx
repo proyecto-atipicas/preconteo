@@ -14,6 +14,7 @@ import {
   PALETA,
   RawRespuesta,
   Snapshot,
+  Vuelta,
   datosToSnapshot,
   fmtNum,
   fmtPct,
@@ -24,7 +25,8 @@ import { DepartamentosSection } from "./components/DepartamentosSection";
 
 const INTERVALO_S = 15; // refresco automático cada 15 s
 type Seccion = "vivo" | "departamentos";
-const LS_KEY = "preconteo_hist_pr_2026";
+// Historial por vuelta (no mezclar boletines de primera y segunda).
+const lsKey = (v: Vuelta) => `preconteo_hist_pr_2026_v${v}`;
 const MAX_HIST = 300;
 
 type Estado = "connecting" | "live" | "paused" | "error";
@@ -306,6 +308,11 @@ function CandidatosLista({
                   <Num value={c.porcentaje} format={(n) => fmtPct(n, 2)} />
                 </span>
               </div>
+              {c.vicepresidente ? (
+                <div className="cand-vp" title={`Fórmula vicepresidencial: ${c.vicepresidente}`}>
+                  <span className="cand-vp-cap">VP</span> {c.vicepresidente}
+                </div>
+              ) : null}
               <div className="bar">
                 <div
                   className="bar-fill"
@@ -725,8 +732,9 @@ function Historico({
             <div className="modal-title">📈 Histórico de la jornada</div>
             <div className="modal-sub">
               Evolución del porcentaje de cada candidato a lo largo del tiempo. El
-              análisis arranca a las 4:00 p.m. (cierre de urnas, 31 may) y avanza
-              hasta el dato más reciente.
+              análisis arranca a las 4:00 p.m. (cierre de urnas
+              {first?.hora ? `, ${first.hora.split(" ")[0]}` : ""}) y avanza hasta
+              el dato más reciente.
             </div>
           </div>
           <div className="modal-actions">
@@ -835,6 +843,8 @@ export default function Home() {
   const [selected, setSelected] = useState<string | null>(null);
   const [showHist, setShowHist] = useState(false);
   const [seccion, setSeccion] = useState<Seccion>("vivo");
+  // Segunda vuelta por defecto (es la jornada en curso).
+  const [vuelta, setVuelta] = useState<Vuelta>(2);
 
   const lastMdhm = useRef<string | null>(null);
   const pausedRef = useRef(false);
@@ -846,11 +856,11 @@ export default function Home() {
     const last = snaps[snaps.length - 1];
     if (last?.mdhm) lastMdhm.current = last.mdhm;
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify(snaps));
+      localStorage.setItem(lsKey(vuelta), JSON.stringify(snaps));
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [vuelta]);
 
   // Al recargar: trae TODOS los boletines desde el #1 vía API HIST oficial.
   useEffect(() => {
@@ -859,7 +869,9 @@ export default function Home() {
     const cargarHistoricoCompleto = async () => {
       setHistLoading(true);
       try {
-        const r = await fetch("/api/historico", { cache: "no-store" });
+        const r = await fetch(`/api/historico?vuelta=${vuelta}`, {
+          cache: "no-store",
+        });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const json = await r.json();
         const boletines: Snapshot[] = json.boletines ?? [];
@@ -870,7 +882,7 @@ export default function Home() {
       } catch {
         if (cancelled) return;
         try {
-          const raw = localStorage.getItem(LS_KEY);
+          const raw = localStorage.getItem(lsKey(vuelta));
           if (raw) {
             const parsed: Snapshot[] = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length) guardarHistorial(parsed);
@@ -887,7 +899,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [guardarHistorial]);
+  }, [guardarHistorial, vuelta]);
 
   const pushToast = useCallback((title: string, body: string) => {
     const id = ++toastId.current;
@@ -901,7 +913,9 @@ export default function Home() {
 
   const cargar = useCallback(async () => {
     try {
-      const r = await fetch("/api/resultados", { cache: "no-store" });
+      const r = await fetch(`/api/resultados?vuelta=${vuelta}`, {
+        cache: "no-store",
+      });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const json: RawRespuesta = await r.json();
       if (json.error) throw new Error(json.error);
@@ -926,7 +940,7 @@ export default function Home() {
           const next = [...prev, snap].slice(-MAX_HIST);
           setHistory(next.map((s) => s.pctParticipacion).slice(-30));
           try {
-            localStorage.setItem(LS_KEY, JSON.stringify(next));
+            localStorage.setItem(lsKey(vuelta), JSON.stringify(next));
           } catch {
             /* ignore */
           }
@@ -962,7 +976,7 @@ export default function Home() {
       setEstado("error");
       setStatusText("Sin conexión, reintentando…");
     }
-  }, [pushToast]);
+  }, [pushToast, vuelta]);
 
   useEffect(() => {
     cargar();
@@ -1029,10 +1043,25 @@ export default function Home() {
   const limpiarHist = () => {
     setHistorial([]);
     try {
-      localStorage.removeItem(LS_KEY);
+      localStorage.removeItem(lsKey(vuelta));
     } catch {
       /* ignore */
     }
+  };
+
+  // Cambia de vuelta: limpia el estado en vivo para no mezclar jornadas.
+  const cambiarVuelta = (v: Vuelta) => {
+    if (v === vuelta) return;
+    lastMdhm.current = null;
+    setDatos(null);
+    setHistorial([]);
+    setHistory([]);
+    setSelected(null);
+    setEstado("connecting");
+    setStatusText("Conectando…");
+    setLastUpdate("—");
+    setSecondsLeft(INTERVALO_S);
+    setVuelta(v);
   };
 
   const dotClass = estado === "live" ? "live" : estado === "error" ? "error" : "warn";
@@ -1047,7 +1076,8 @@ export default function Home() {
           <div>
             <div className="brand-title">Elecciones Presidenciales 2026</div>
             <div className="brand-sub">
-              Resultados en tiempo real · Colombia (nacional)
+              {vuelta === 2 ? "Segunda vuelta" : "Primera vuelta"} · Resultados en
+              tiempo real · Colombia (nacional)
             </div>
           </div>
         </div>
@@ -1089,25 +1119,44 @@ export default function Home() {
         </div>
       </header>
 
-      <nav className="nav-tabs" aria-label="Secciones">
-        <button
-          type="button"
-          className={`nav-tab ${seccion === "vivo" ? "active" : ""}`}
-          onClick={() => setSeccion("vivo")}
-        >
-          En vivo
-        </button>
-        <button
-          type="button"
-          className={`nav-tab ${seccion === "departamentos" ? "active" : ""}`}
-          onClick={() => setSeccion("departamentos")}
-        >
-          Por departamento
-        </button>
-      </nav>
+      <div className="tabs-row">
+        <nav className="nav-tabs" aria-label="Secciones">
+          <button
+            type="button"
+            className={`nav-tab ${seccion === "vivo" ? "active" : ""}`}
+            onClick={() => setSeccion("vivo")}
+          >
+            En vivo
+          </button>
+          <button
+            type="button"
+            className={`nav-tab ${seccion === "departamentos" ? "active" : ""}`}
+            onClick={() => setSeccion("departamentos")}
+          >
+            Por departamento
+          </button>
+        </nav>
+
+        <div className="vuelta-switch" role="group" aria-label="Vuelta electoral">
+          <button
+            type="button"
+            className={`vuelta-tab ${vuelta === 1 ? "active" : ""}`}
+            onClick={() => cambiarVuelta(1)}
+          >
+            Primera vuelta
+          </button>
+          <button
+            type="button"
+            className={`vuelta-tab ${vuelta === 2 ? "active" : ""}`}
+            onClick={() => cambiarVuelta(2)}
+          >
+            Segunda vuelta
+          </button>
+        </div>
+      </div>
 
       {seccion === "departamentos" ? (
-        <DepartamentosSection />
+        <DepartamentosSection vuelta={vuelta} />
       ) : (
         <>
       {/* ---------------- CARDS ---------------- */}
