@@ -1285,6 +1285,7 @@ body::after {
 }
 
 /* ============ RESPONSIVE ============ */
+/* Tablets y pantallas medianas: se libera el alto fijo y se permite scroll. */
 @media (max-width: 1000px) {
   body {
     overflow: auto;
@@ -1297,19 +1298,126 @@ body::after {
   .cards {
     grid-template-columns: repeat(2, 1fr);
   }
+  /* La card de diferencia, cuando queda sola en su fila, ocupa todo el ancho. */
+  .cards .card:last-child {
+    grid-column: 1 / -1;
+  }
   .grid {
     grid-template-columns: 1fr;
   }
+  .panel,
+  .right-panel,
   .cand-list {
     overflow: visible;
   }
 }
-@media (max-width: 540px) {
-  .cards {
-    grid-template-columns: 1fr;
+
+/* Teléfonos y tablets pequeñas. */
+@media (max-width: 760px) {
+  .shell {
+    padding: 0 12px 14px;
+    gap: 10px;
+  }
+
+  /* Topbar: marca arriba; estado y controles a lo ancho debajo. */
+  .topbar {
+    gap: 10px;
+    padding: 12px 0 10px;
+  }
+  .controls {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .status {
+    flex: 1 1 100%;
+    text-align: left;
+  }
+  .status-line {
+    justify-content: flex-start;
+  }
+
+  /* Pestañas e interruptor de vuelta como controles segmentados a lo ancho. */
+  .tabs-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .nav-tabs,
+  .vuelta-switch {
+    width: 100%;
+  }
+  .nav-tab,
+  .vuelta-tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px 8px;
+  }
+
+  /* Cards más compactas. */
+  .card {
+    padding: 12px;
+  }
+  .card-value {
+    font-size: 22px;
+  }
+
+  /* Tabla por departamento: buscador a lo ancho. */
+  .dept-toolbar-right {
+    width: 100%;
+  }
+  .dept-search {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Modal casi a pantalla completa. */
+  .modal-backdrop {
+    padding: 10px;
+  }
+  .modal {
+    width: 100%;
+    height: min(92dvh, 760px);
+    padding: 16px;
+    border-radius: 16px;
+  }
+  .modal-head {
+    flex-wrap: wrap;
   }
   .modal-stats {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .modal-body {
+    overflow: auto;
+  }
+  /* Gráfico con scroll horizontal para no aplastarse en vertical. */
+  .chart-wrap {
+    flex: none;
+    height: 300px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .chart-wrap svg {
+    width: 680px;
+    height: 300px;
+  }
+
+  /* Toasts a lo ancho, pegados abajo. */
+  .toasts {
+    right: 10px;
+    left: 10px;
+    bottom: 10px;
+    max-width: none;
+  }
+}
+
+/* Teléfonos estrechos: una sola columna de cards. */
+@media (max-width: 400px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  .brand-title {
+    font-size: 15px;
   }
 }
 
